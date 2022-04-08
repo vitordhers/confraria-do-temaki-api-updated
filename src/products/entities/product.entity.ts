@@ -16,4 +16,5 @@ export class DbProduct implements IProduct {
   public conditions?: string[];
   public notes?: string[];
   public ingredients?: IIngredient[];
+  public rank?: number;
 }

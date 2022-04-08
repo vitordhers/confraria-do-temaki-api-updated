@@ -48,6 +48,7 @@ export class ProductsService {
       conditions,
       notes,
       ingredients,
+      rank,
     } = createProductDto;
 
     const newProduct: DbProduct = {
@@ -64,6 +65,7 @@ export class ProductsService {
       conditions,
       notes,
       ingredients,
+      rank,
     };
 
     const result = await this.dbService.query<DbProduct>(
@@ -89,6 +91,7 @@ export class ProductsService {
       conditions: dto.conditions,
       notes: dto.notes,
       ingredients: dto.ingredients,
+      rank: dto.rank,
     }));
 
     return await this.dbService.query<DbProduct>(

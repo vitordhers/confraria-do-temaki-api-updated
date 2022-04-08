@@ -3,6 +3,6 @@ export class DbMessageContact {
   name: string;
   email: string;
   message: string;
-  sentAt: Date;
-  readAt?: Date;
+  sentAt: number;
+  readAt?: number;
 }

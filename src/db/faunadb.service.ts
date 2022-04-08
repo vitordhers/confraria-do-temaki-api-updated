@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Client, ExprArg, QueryOptions } from 'faunadb';
+import { Client, ExprArg, QueryOptions, Ref } from 'faunadb';
 import { ConfigService } from '@nestjs/config';
 import { FaunaError } from './interfaces/fauna-error.model';
 
@@ -21,21 +21,27 @@ export class FaunaDbService {
     options?: QueryOptions | undefined,
   ): Promise<T | T[]> {
     try {
-      if (this.client) {
-        const res = await this.client?.query<
-          { data: T } | { data: T }[] | { data: { data: T }[] }
-        >(expr, options);
-        if (res && Array.isArray(res)) {
-          return res.map((r) => r.data);
-        }
-        if (res && !Array.isArray(res) && res.data) {
-          if (Array.isArray(res.data)) {
-            return res.data.map((d) => d.data);
-          }
+      if (!this.client) {
+        throw new NotFoundException(`Fauna Client not instantiated`);
+      }
 
-          return res.data;
+      const res = await this.client.query<
+        | { data: T }
+        | { data: T }[]
+        | { data: { data: T }[] }
+        | { data: { T }[] }
+      >(expr, options);
+
+      if (res && Array.isArray(res)) {
+        return res.map((r) => r.data);
+      }
+
+      if (res && !Array.isArray(res) && res.data) {
+        if (Array.isArray(res.data)) {
+          return res.data.map((d) => d.data || d);
         }
-        throw new NotFoundException();
+
+        return res.data;
       }
       throw new NotFoundException();
     } catch (e: any) {

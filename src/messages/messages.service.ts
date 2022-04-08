@@ -7,15 +7,18 @@ import { v4 as uuid } from 'uuid';
 import { FaunaDbService } from 'src/db/faunadb.service';
 import {
   Collection,
+  ContainsField,
   Create,
   Documents,
   Get,
+  If,
   Index,
   Lambda,
   Map,
   Match,
   Paginate,
   Select,
+  Sum,
   Update,
 } from 'faunadb';
 import { UpdateReadAtDto } from './dto/update-lead-read-at.dto';
@@ -65,7 +68,7 @@ export class MessagesService {
       investment,
       reference,
       message,
-      sentAt: new Date(),
+      sentAt: Math.round(Date.now() / 1000),
       readAt: null,
     };
 
@@ -89,7 +92,7 @@ export class MessagesService {
       name,
       email,
       message,
-      sentAt: new Date(),
+      sentAt: Math.round(Date.now() / 1000),
       readAt: null,
     };
 
@@ -105,33 +108,48 @@ export class MessagesService {
     }
   }
 
-  async getFranchisingLeads(start = 0, size = 10) {
-    const result = (await this.dbService.query<DbFranchisingLead[]>(
+  async getFranchisingLeads({ after, size }: { after?: number; size: number }) {
+    const result = await this.dbService.query<DbFranchisingLead[]>(
       Map(
         Paginate(
-          Documents(Collection('leads')),
-          size && start ? { size, start } : null,
+          Match(Index('leads_sort_by_sentAt_desc')),
+          after ? { size, after } : { size },
         ),
-        Lambda((x) => Get(x)),
+        Lambda((x, ref) =>
+          Select(['data'], Match(Index('leads_sort_by_sentAt_desc')), Get(ref)),
+        ),
       ),
-    )) as DbFranchisingLead[];
+    );
+
     if (result) {
+      if (after) {
+        result.shift();
+      }
       return result;
     }
     return [];
   }
 
-  async getMessageContacts(start = 0, size = 10) {
+  async getMessageContacts({ after, size }: { after?: number; size: number }) {
     const result = (await this.dbService.query<DbMessageContact[]>(
       Map(
         Paginate(
-          Documents(Collection('messages')),
-          size && start ? { size, start } : null,
+          Match(Index('messages_sort_by_sentAt_desc')),
+          after ? { size, after } : { size },
         ),
-        Lambda((x) => Get(x)),
+        Lambda((x, ref) =>
+          Select(
+            ['data'],
+            Match(Index('messages_sort_by_sentAt_desc')),
+            Get(ref),
+          ),
+        ),
       ),
     )) as DbMessageContact[];
     if (result) {
+      if (after) {
+        result.shift();
+      }
       return result;
     }
     return [];
@@ -232,12 +250,19 @@ export class MessagesService {
     return html;
   }
 
-  async updateLeadReatAt(updateLeadReadAt: UpdateReadAtDto) {
+  async updateLeadReatAt(updateLeadReadAtDto: UpdateReadAtDto) {
     const result = await this.dbService.query<DbFranchisingLead>(
       Update(
-        Select(['ref'], Get(Match(Index('lead_by_id'), updateLeadReadAt.id))),
+        Select(
+          ['ref'],
+          Get(Match(Index('lead_by_id'), updateLeadReadAtDto.id)),
+        ),
         {
-          data: updateLeadReadAt,
+          data: {
+            readAt: Math.round(
+              new Date(updateLeadReadAtDto.readAt).getTime() / 1000,
+            ),
+          },
         },
       ),
     );
@@ -245,19 +270,53 @@ export class MessagesService {
     return result;
   }
 
-  async updateMessageReatAt(updateMessageReadAt: UpdateReadAtDto) {
+  async updateMessageReatAt(updateMessageReadAtDto: UpdateReadAtDto) {
     const result = await this.dbService.query<DbMessageContact>(
       Update(
         Select(
           ['ref'],
-          Get(Match(Index('message_by_id'), updateMessageReadAt.id)),
+          Get(Match(Index('message_by_id'), updateMessageReadAtDto.id)),
         ),
         {
-          data: updateMessageReadAt,
+          data: {
+            readAt: Math.round(
+              new Date(updateMessageReadAtDto.readAt).getTime() / 1000,
+            ),
+          },
         },
       ),
     );
 
     return result;
+  }
+
+  async getNewLeadsAndMessages() {
+    let newLeads = (await this.dbService.query<[number]>(
+      Sum(
+        Map(
+          Paginate(Documents(Collection('leads'))),
+          Lambda((ref) =>
+            If(ContainsField('readAt', Select('data', Get(ref))), 0, 1),
+          ),
+        ),
+      ),
+    )) as [number];
+    if (!newLeads) {
+      newLeads = [0];
+    }
+    let newMessages = (await this.dbService.query<[number]>(
+      Sum(
+        Map(
+          Paginate(Documents(Collection('messages'))),
+          Lambda((ref) =>
+            If(ContainsField('readAt', Select('data', Get(ref))), 0, 1),
+          ),
+        ),
+      ),
+    )) as [number];
+    if (!newMessages) {
+      newMessages = [0];
+    }
+    return { newLeads: newLeads[0], newMessages: newMessages[0] };
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   Collection,
   Create,
@@ -11,6 +11,8 @@ import {
   Lambda,
   Documents,
   Var,
+  Delete,
+  Select,
 } from 'faunadb';
 import { FaunaDbService } from '../db/faunadb.service';
 import { v4 as uuid } from 'uuid';
@@ -69,21 +71,19 @@ export class CategoriesService {
     return [];
   }
 
-  async findOne(slug: string) {
-    const result = (await this.dbService.query<DbCategory>(
-      Get(Match(Index('category_by_slug'), slug)),
-    )) as DbCategory;
-    if (!result) {
-      return undefined;
-    }
-    return result;
-  }
-
   update(id: number, updateCategoryDto: UpdateCategoryDto) {
     return `This action updates a #${id} unit`;
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} unit`;
+  async remove(id: string) {
+    const result = (await this.dbService.query<DbCategory>(
+      Delete(Select(['ref'], Get(Match(Index('category_by_id'), id)))),
+    )) as DbCategory;
+    if (!result) {
+      throw new BadRequestException(
+        `Category with id ${id} couldn't be deleted`,
+      );
+    }
+    return;
   }
 }

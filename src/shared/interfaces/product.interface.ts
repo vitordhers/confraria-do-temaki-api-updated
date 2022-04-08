@@ -15,4 +15,5 @@ export interface IProduct {
   conditions?: string[];
   notes?: string[];
   ingredients?: IIngredient[];
+  rank?: number;
 }

@@ -23,7 +23,7 @@ export class CategoriesController {
   @Post()
   @UseGuards(AdminToken)
   async create(@Body() createCategoryDto: CreateCategoryDto) {
-    return await mapRequestToResponse<DbCategory[]>(
+    return await mapRequestToResponse<DbCategory>(
       this.categoriesService,
       this.categoriesService.create,
       createCategoryDto,
@@ -51,11 +51,6 @@ export class CategoriesController {
     );
   }
 
-  @Get(':slug')
-  findOne(@Param('slug') slug: string) {
-    return this.categoriesService.findOne(slug);
-  }
-
   @Patch(':id')
   @UseGuards(AdminToken)
   update(@Param('id') id: string, @Body() updateUnitDto: UpdateCategoryDto) {
@@ -64,7 +59,11 @@ export class CategoriesController {
 
   @Delete(':id')
   @UseGuards(AdminToken)
-  remove(@Param('id') id: string) {
-    return this.categoriesService.remove(+id);
+  async remove(@Param('id') id: string) {
+    return await mapRequestToResponse<void>(
+      this.categoriesService,
+      this.categoriesService.remove,
+      id,
+    );
   }
 }

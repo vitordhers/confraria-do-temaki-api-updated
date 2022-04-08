@@ -6,6 +6,7 @@ import {
   Query,
   Put,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import { AdminToken } from '../auth/guards/admin-role.guard';
 import mapPayloadToResponse from '../shared/functions/map-payload-to-response.function';
@@ -13,6 +14,8 @@ import mapRequestToResponse from '../shared/functions/map-request-to-response.fu
 import CreateContactMessageDto from './dto/create-contact-message.dto';
 import FranchisingContactDto from './dto/franchising-contact.dto';
 import { UpdateReadAtDto } from './dto/update-lead-read-at.dto';
+import { DbFranchisingLead } from './entities/db-franchising-lead.entity';
+import { DbMessageContact } from './entities/db-message-contact.entity';
 import { MessagesService } from './messages.service';
 
 @Controller('messages')
@@ -42,29 +45,48 @@ export class MessagesController {
   @Get('leads')
   @UseGuards(AdminToken)
   async getFranchisingLeads(
-    @Query('start') start: string,
+    @Query('start') after: string,
     @Query('size') size: string,
   ) {
-    return mapRequestToResponse(
+    if (!size) {
+      throw new BadRequestException('Size is required');
+    }
+    return await mapRequestToResponse<DbFranchisingLead[]>(
       this.messagesService,
       this.messagesService.getFranchisingLeads,
-      +start,
-      +size,
+      {
+        start: +after || null,
+        size: +size,
+      },
     );
   }
 
   @Get('messages')
   @UseGuards(AdminToken)
   async getMessageContacts(
-    @Query('start') start: string,
+    @Query('after') after: string,
     @Query('size') size: string,
   ) {
-    return mapRequestToResponse(
+    if (!size) {
+      throw new BadRequestException('Size is required');
+    }
+    return await mapRequestToResponse<DbMessageContact[]>(
       this.messagesService,
       this.messagesService.getMessageContacts,
-      +start,
-      +size,
+      {
+        after: +after || null,
+        size: +size || 20,
+      },
     );
+  }
+
+  @Get('new')
+  @UseGuards(AdminToken)
+  async getNewLeadsAndMessages() {
+    return await mapRequestToResponse<{
+      newLeads: number;
+      newMessages: number;
+    }>(this.messagesService, this.messagesService.getNewLeadsAndMessages);
   }
 
   @Put('lead')

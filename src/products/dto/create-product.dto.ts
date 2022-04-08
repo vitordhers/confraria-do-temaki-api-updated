@@ -9,6 +9,8 @@ import {
   NotEquals,
   ValidateNested,
   Length,
+  Min,
+  Max,
 } from 'class-validator';
 import { IIngredient } from '../../shared/interfaces/ingredient.interface';
 import { IPrice } from '../../shared/interfaces/price.interface';
@@ -85,6 +87,13 @@ export class CreateProductDto {
   @IsArray()
   @ValidateNested({ each: true })
   ingredients?: Ingredient[];
+
+  @IsOptional()
+  @IsNotEmpty()
+  @IsNumber()
+  @Min(1)
+  @Max(998)
+  rank?: number;
 }
 
 class Price implements IPrice {

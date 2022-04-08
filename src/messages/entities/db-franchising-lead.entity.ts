@@ -11,6 +11,6 @@ export class DbFranchisingLead {
   investment: InvestmentRange;
   reference: string;
   message: string;
-  sentAt: Date;
-  readAt?: Date;
+  sentAt: number; // timestamp
+  readAt?: number; // timestamp
 }

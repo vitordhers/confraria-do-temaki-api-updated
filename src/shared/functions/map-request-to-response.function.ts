@@ -9,6 +9,7 @@ async function mapRequestToResponse<T = any>(
     const entity = await method.apply(context, args);
     return { success: true, payload: entity };
   } catch (e: any) {
+    console.log('mapRequestToResponse ERROR', e);
     return { success: false, message: e.message };
   }
 }
