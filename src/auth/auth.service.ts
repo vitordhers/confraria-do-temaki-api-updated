@@ -29,8 +29,8 @@ export class AuthService {
       throw new BadRequestException();
     }
 
-    const { id, role } = user;
-    const jwtPayload = { id, role };
+    const { id, role, unitsOwnedIds } = user;
+    const jwtPayload = { id, role, unitsOwnedIds };
     return await this.tokenService.getCredentials(jwtPayload, true);
   }
   async validateUser(

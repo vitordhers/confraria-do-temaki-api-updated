@@ -8,6 +8,7 @@ import {
   Delete,
   ParseArrayPipe,
   UseGuards,
+  Put,
 } from '@nestjs/common';
 import { AdminToken } from 'src/auth/guards/admin-role.guard';
 import mapRequestToResponse from '../shared/functions/map-request-to-response.function';
@@ -30,18 +31,18 @@ export class CategoriesController {
     );
   }
 
-  @Post('bulk')
-  @UseGuards(AdminToken)
-  async createBulk(
-    @Body(new ParseArrayPipe({ items: CreateCategoryDto }))
-    createCategoryDtos: CreateCategoryDto[],
-  ) {
-    return await mapRequestToResponse<DbCategory>(
-      this.categoriesService,
-      this.categoriesService.createBulk,
-      createCategoryDtos,
-    );
-  }
+  // @Post('bulk')
+  // @UseGuards(AdminToken)
+  // async createBulk(
+  //   @Body(new ParseArrayPipe({ items: CreateCategoryDto }))
+  //   createCategoryDtos: CreateCategoryDto[],
+  // ) {
+  //   return await mapRequestToResponse<DbCategory>(
+  //     this.categoriesService,
+  //     this.categoriesService.createBulk,
+  //     createCategoryDtos,
+  //   );
+  // }
 
   @Get()
   async findAll() {
@@ -51,10 +52,14 @@ export class CategoriesController {
     );
   }
 
-  @Patch(':id')
+  @Put()
   @UseGuards(AdminToken)
-  update(@Param('id') id: string, @Body() updateUnitDto: UpdateCategoryDto) {
-    return this.categoriesService.update(+id, updateUnitDto);
+  async update(@Body() updateUnitDto: UpdateCategoryDto) {
+    return await mapRequestToResponse<DbCategory>(
+      this.categoriesService,
+      this.categoriesService.update,
+      updateUnitDto,
+    );
   }
 
   @Delete(':id')

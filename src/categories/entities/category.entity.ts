@@ -4,5 +4,6 @@ export class DbCategory implements ICategory {
   id: string;
   name: string;
   slug: string;
+  rank?: number;
   description?: string;
 }

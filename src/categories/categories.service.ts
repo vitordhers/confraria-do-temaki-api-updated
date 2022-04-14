@@ -13,6 +13,7 @@ import {
   Var,
   Delete,
   Select,
+  Update,
 } from 'faunadb';
 import { FaunaDbService } from '../db/faunadb.service';
 import { v4 as uuid } from 'uuid';
@@ -24,11 +25,12 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 export class CategoriesService {
   constructor(private dbService: FaunaDbService) {}
   async create(createCategoryDto: CreateCategoryDto) {
-    const { name, slug, description } = createCategoryDto;
+    const { name, slug, rank, description } = createCategoryDto;
     const newCategory: DbCategory = {
       id: uuid(),
       name,
       slug,
+      rank,
       description,
     };
     return await this.dbService.query<DbCategory>(
@@ -38,25 +40,25 @@ export class CategoriesService {
     );
   }
 
-  async createBulk(createCategoryDtos: CreateCategoryDto[]) {
-    const newCategories = createCategoryDtos.map((dto) => ({
-      id: uuid(),
-      name: dto.name,
-      slug: dto.slug,
-      description: dto.description,
-    }));
+  // async createBulk(createCategoryDtos: CreateCategoryDto[]) {
+  //   const newCategories = createCategoryDtos.map((dto) => ({
+  //     id: uuid(),
+  //     name: dto.name,
+  //     slug: dto.slug,
+  //     description: dto.description,
+  //   }));
 
-    const result = await this.dbService.query(
-      Map(
-        newCategories,
-        Lambda(
-          ['data'],
-          Create(Collection('categories'), { data: Var('data') }),
-        ),
-      ),
-    );
-    return result;
-  }
+  //   const result = await this.dbService.query(
+  //     Map(
+  //       newCategories,
+  //       Lambda(
+  //         ['data'],
+  //         Create(Collection('categories'), { data: Var('data') }),
+  //       ),
+  //     ),
+  //   );
+  //   return result;
+  // }
 
   async findAll() {
     const result = (await this.dbService.query<DbCategory>(
@@ -71,8 +73,18 @@ export class CategoriesService {
     return [];
   }
 
-  update(id: number, updateCategoryDto: UpdateCategoryDto) {
-    return `This action updates a #${id} unit`;
+  async update(updateCategoryDto: UpdateCategoryDto) {
+    return await this.dbService.query<DbCategory>(
+      Update(
+        Select(
+          ['ref'],
+          Get(Match(Index('category_by_id'), updateCategoryDto.id)),
+        ),
+        {
+          data: updateCategoryDto,
+        },
+      ),
+    );
   }
 
   async remove(id: string) {

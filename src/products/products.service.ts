@@ -25,6 +25,8 @@ import { v4 as uuid } from 'uuid';
 import { DbProduct } from './entities/product.entity';
 import { ConfigService } from '@nestjs/config';
 import { S3, config } from 'aws-sdk';
+import { UpdateUnitsDto } from './dto/update-units.dto';
+import { IDbUser } from 'src/shared/interfaces/db-user.interface';
 // const AWS = require('aws-sdk');
 
 @Injectable()
@@ -102,6 +104,16 @@ export class ProductsService {
     );
   }
 
+  async findOne(id: string) {
+    const result = (await this.dbService.query<DbProduct>(
+      Get(Match(Index('product_by_id'), id)),
+    )) as DbProduct;
+    if (!result) {
+      return undefined;
+    }
+    return result;
+  }
+
   async findAll(size = 1000) {
     const result = (await this.dbService.query<DbProduct>(
       Map(
@@ -127,6 +139,47 @@ export class ProductsService {
         },
       ),
     );
+  }
+
+  async updateUnits(user: IDbUser, updateUnitsDto: UpdateUnitsDto) {
+    const product = await this.findOne(updateUnitsDto.id);
+    if (!product) {
+      throw new BadRequestException(`Product not found`);
+    }
+    const userUnits = user.unitsOwnedIds;
+    // validate users units
+    updateUnitsDto.unitsAvailable.map((unitId) => {
+      if (!userUnits.includes(unitId)) {
+        throw new BadRequestException(`User doesn't own unit ${unitId}`);
+      }
+    });
+
+    const mergedUnits = new Set([
+      ...product.unitsAvailable,
+      ...updateUnitsDto.unitsAvailable,
+    ]);
+
+    const updatedUnits: string[] = [...mergedUnits].reduce(
+      (previousValue, currentValue, _, array) => {
+        if (!array.includes(currentValue)) {
+          return [...previousValue, currentValue];
+        }
+
+        if (updateUnitsDto.unitsAvailable.includes(currentValue)) {
+          return [...previousValue, currentValue];
+        }
+
+        return [...previousValue];
+      },
+      [],
+    );
+
+    const updatedProduct: UpdateProductDto = {
+      id: updateUnitsDto.id,
+      unitsAvailable: updatedUnits,
+    };
+
+    return await this.update(updatedProduct);
   }
 
   async remove(id: string) {

@@ -35,7 +35,7 @@ export class TokenService {
 
   createRefreshToken(payload: IJwtPayload) {
     return this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('REFRESH_TOKEN_SECRET_PRIVATE')!,
+      secret: this.configService.get<string>('REFRESH_TOKEN_SECRET_PRIVATE'),
       expiresIn: '30d',
       algorithm: Algorithms.ES512,
     });

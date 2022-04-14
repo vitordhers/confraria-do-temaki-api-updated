@@ -21,14 +21,18 @@ export class AuthController {
   async refreshToken(
     @GetDataFromRefreshToken()
     {
-      user: { id, role },
+      user: { id, role, unitsOwnedIds },
       refreshToken,
     }: {
-      user: { id: string; role: UserRole };
+      user: { id: string; role: UserRole; unitsOwnedIds: string[] };
       refreshToken: string;
     },
   ) {
-    const accessToken = await this.tokenService.createAccessToken({ id, role });
+    const accessToken = await this.tokenService.createAccessToken({
+      id,
+      role,
+      unitsOwnedIds,
+    });
     return mapPayloadToResponse<Credentials>(true, {
       accessToken,
       refreshToken,

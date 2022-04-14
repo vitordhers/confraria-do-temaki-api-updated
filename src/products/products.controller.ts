@@ -10,6 +10,8 @@ import {
   UploadedFiles,
   UseInterceptors,
   UseGuards,
+  Patch,
+  Req,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -20,6 +22,9 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import fileFilter from './functions/file-filter.function';
 import { AdminToken } from 'src/auth/guards/admin-role.guard';
 import { Multer } from 'multer'; // this line makes multer types available
+import { UpdateUnitsDto } from './dto/update-units.dto';
+import { AccessToken } from 'src/auth/guards/jwt.guard';
+import { DbUser } from 'aws-sdk/clients/cloudwatchevents';
 
 @Controller('products')
 export class ProductsController {
@@ -63,6 +68,20 @@ export class ProductsController {
       this.productsService,
       this.productsService.update,
       updateProductDto,
+    );
+  }
+
+  @Patch('units')
+  @UseGuards(AccessToken)
+  async updateUnits(
+    @Req() { user }: { user: DbUser },
+    @Body() updateUnitsDto: UpdateUnitsDto,
+  ) {
+    return await mapRequestToResponse<DbProduct>(
+      this.productsService,
+      this.productsService.updateUnits,
+      user,
+      updateUnitsDto,
     );
   }
 

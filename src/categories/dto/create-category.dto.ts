@@ -4,6 +4,9 @@ import {
   IsString,
   IsOptional,
   Length,
+  Min,
+  Max,
+  IsNumber,
 } from 'class-validator';
 
 export class CreateCategoryDto {
@@ -18,6 +21,13 @@ export class CreateCategoryDto {
   @IsString()
   @Length(2, 20)
   slug: string;
+
+  @IsOptional()
+  @IsNotEmpty()
+  @IsNumber()
+  @Min(1)
+  @Max(9998)
+  rank?: number;
 
   @IsOptional()
   @IsNotEmpty()
