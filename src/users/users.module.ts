@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
-import { DbModule } from '../db/faunadb.module';
+import { DbModule } from '../db/firestore.module';
 import { TokenService } from '../auth/jwt.service';
 import { JwtModule } from '@nestjs/jwt';
 import AccessTokenStrategyConfigFactory from '../auth/constants/access-token-config.const';

@@ -1,5 +1,5 @@
 import { IsDefined, IsNotEmpty, IsString } from 'class-validator';
-import { GoogleRecaptchaV3 } from 'src/shared/validators/google-recaptcha-v3.constraint';
+import { GoogleRecaptchaV3 } from '../../shared/validators/google-recaptcha-v3.constraint';
 
 export class UpdateUserPasswordDto {
   @IsDefined()

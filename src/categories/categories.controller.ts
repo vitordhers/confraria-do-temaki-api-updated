@@ -3,14 +3,12 @@ import {
   Get,
   Post,
   Body,
-  Patch,
   Param,
   Delete,
-  ParseArrayPipe,
   UseGuards,
   Put,
 } from '@nestjs/common';
-import { AdminToken } from 'src/auth/guards/admin-role.guard';
+import { AdminToken } from '../auth/guards/admin-role.guard';
 import mapRequestToResponse from '../shared/functions/map-request-to-response.function';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';

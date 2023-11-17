@@ -14,8 +14,8 @@ import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AdminToken } from '../auth/guards/admin-role.guard';
-import mapRequestToResponse from 'src/shared/functions/map-request-to-response.function';
-import { IDbUser } from 'src/shared/interfaces/db-user.interface';
+import mapRequestToResponse from '../shared/functions/map-request-to-response.function';
+import { IDbUser } from '../shared/interfaces/db-user.interface';
 import { UpdateUserPasswordDto } from './dto/update-user-password.dto';
 
 @Controller('users')

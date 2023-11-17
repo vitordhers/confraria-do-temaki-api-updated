@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DbModule } from '../db/faunadb.module';
+import { DbModule } from '../db/firestore.module';
 import { CategoriesController } from './categories.controller';
 import { CategoriesService } from './categories.service';
 

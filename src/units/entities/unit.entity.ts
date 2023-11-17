@@ -1,13 +1,15 @@
 import { IUnit } from '../../shared/interfaces/unit.interface';
 
 export class DbUnit implements IUnit {
-  id: string;
-  name: string;
-  location: string;
-  address: string;
-  telephone: string;
-  workingHours: string[];
-  lat: number;
-  lng: number;
-  whatsapp?: string;
+  constructor(
+    public id: string,
+    public name: string,
+    public location: string,
+    public address: string,
+    public telephone: string,
+    public workingHours: string[],
+    public lat: number,
+    public lng: number,
+    public whatsapp?: string,
+  ) {}
 }

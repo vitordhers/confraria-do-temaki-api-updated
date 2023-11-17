@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { UnitsService } from './units.service';
 import { UnitsController } from './units.controller';
-import { DbModule } from '../db/faunadb.module';
+import { DbModule } from '../db/firestore.module';
 
 @Module({
   imports: [DbModule],

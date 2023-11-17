@@ -2,23 +2,9 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
-import {
-  Collection,
-  Create,
-  Map,
-  Lambda,
-  Var,
-  Paginate,
-  Documents,
-  Get,
-  Update,
-  Match,
-  Index,
-  Select,
-  Delete,
-} from 'faunadb';
-import { FaunaDbService } from '../db/faunadb.service';
+
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { v4 as uuid } from 'uuid';
@@ -26,13 +12,18 @@ import { DbProduct } from './entities/product.entity';
 import { ConfigService } from '@nestjs/config';
 import { S3, config } from 'aws-sdk';
 import { UpdateUnitsDto } from './dto/update-units.dto';
-import { IDbUser } from 'src/shared/interfaces/db-user.interface';
+import { IDbUser } from '../shared/interfaces/db-user.interface';
+import { FirestoreService } from '../db/firestore.service';
+import { Collection } from '../db/collection.enum';
+import { inspect } from 'util';
+import { Multer } from 'multer';
 // const AWS = require('aws-sdk');
 
 @Injectable()
 export class ProductsService {
+  private logger = new Logger('ProductsService');
   constructor(
-    private dbService: FaunaDbService,
+    private firestoreService: FirestoreService,
     private configService: ConfigService,
   ) {}
 
@@ -70,133 +61,198 @@ export class ProductsService {
       rank,
     };
 
-    const result = await this.dbService.query<DbProduct>(
-      Create(Collection('products'), {
-        data: newProduct,
-      }),
-    );
-    return result;
+    try {
+      const result = await this.firestoreService.create(
+        Collection.PRODUCTS,
+        newProduct,
+      );
+      if (!result || !result.success) {
+        throw new BadRequestException(
+          `create failed: ${inspect({ result }, { depth: null })}`,
+        );
+      }
+
+      return this.firestoreService.parseFirebaseResult(
+        Collection.PRODUCTS,
+        result,
+      ) as DbProduct;
+    } catch (error) {
+      this.logger.error(`create error: ${inspect({ error }, { depth: null })}`);
+    }
   }
 
   async createBulk(createProductDto: CreateProductDto[]) {
-    const newProducts = createProductDto.map((dto) => ({
-      id: uuid(),
-      name: dto.name,
-      categoriesIds: dto.categoriesIds,
-      unitsAvailable: dto.unitsAvailable,
-      price: dto.price,
-      slug: dto.slug,
-      imageUrl: dto.imageUrl,
-      description: dto.description,
-      attributes: dto.attributes,
-      requested: dto.requested,
-      conditions: dto.conditions,
-      notes: dto.notes,
-      ingredients: dto.ingredients,
-      rank: dto.rank,
-    }));
+    const promises = createProductDto.map(async (dto) => {
+      const newProduct = {
+        id: uuid(),
+        name: dto.name,
+        categoriesIds: dto.categoriesIds,
+        unitsAvailable: dto.unitsAvailable,
+        price: dto.price,
+        slug: dto.slug,
+        imageUrl: dto.imageUrl,
+        description: dto.description,
+        attributes: dto.attributes,
+        requested: dto.requested,
+        conditions: dto.conditions,
+        notes: dto.notes,
+        ingredients: dto.ingredients,
+        rank: dto.rank,
+      };
 
-    return await this.dbService.query<DbProduct>(
-      Map(
-        newProducts,
-        Lambda(['data'], Create(Collection('products'), { data: Var('data') })),
-      ),
-    );
-  }
+      try {
+        const result = await this.firestoreService.create(
+          Collection.PRODUCTS,
+          newProduct,
+        );
 
-  async findOne(id: string) {
-    const result = (await this.dbService.query<DbProduct>(
-      Get(Match(Index('product_by_id'), id)),
-    )) as DbProduct;
-    if (!result) {
-      return undefined;
-    }
-    return result;
-  }
-
-  async findAll(size = 1000) {
-    const result = (await this.dbService.query<DbProduct>(
-      Map(
-        Paginate(Documents(Collection('products')), { size }),
-        Lambda((x) => Get(x)),
-      ),
-    )) as DbProduct[];
-    if (result) {
-      return result;
-    }
-    return [];
-  }
-
-  async update(updateProductDto: UpdateProductDto) {
-    return await this.dbService.query<DbProduct>(
-      Update(
-        Select(
-          ['ref'],
-          Get(Match(Index('product_by_id'), updateProductDto.id)),
-        ),
-        {
-          data: updateProductDto,
-        },
-      ),
-    );
-  }
-
-  async updateUnits(user: IDbUser, updateUnitsDto: UpdateUnitsDto) {
-    const product = await this.findOne(updateUnitsDto.id);
-    if (!product) {
-      throw new BadRequestException(`Product not found`);
-    }
-    const userUnits = user.unitsOwnedIds;
-    // validate users units
-    updateUnitsDto.unitsAvailable.map((unitId) => {
-      if (!userUnits.includes(unitId)) {
-        throw new BadRequestException(`User doesn't own unit ${unitId}`);
+        if (!result || !result.success || !result.data) {
+          throw new BadRequestException(
+            `create failed ${inspect({ result }, { depth: null })}`,
+          );
+        }
+        return this.firestoreService.parseFirebaseResult(
+          Collection.PRODUCTS,
+          result,
+        ) as DbProduct;
+      } catch (error) {
+        this.logger.error(
+          `createBulk error: ${inspect({ error }, { depth: null })}`,
+        );
       }
     });
 
-    const mergedUnits = new Set([
-      ...product.unitsAvailable,
-      ...updateUnitsDto.unitsAvailable,
-    ]);
+    try {
+      const products = await Promise.all(promises);
+      return products.filter((p) => !!p);
+    } catch (error) {
+      this.logger.error(
+        `createBulk error: ${inspect({ error }, { depth: null })}`,
+      );
+    }
+  }
 
-    const updatedUnits: string[] = [...mergedUnits].reduce(
-      (previousValue, currentValue, _, array) => {
-        if (!array.includes(currentValue)) {
-          return [...previousValue, currentValue];
+  async findOne(id: string) {
+    try {
+      const result = await this.firestoreService.getOne(
+        Collection.PRODUCTS,
+        id,
+      );
+      if (!result || !result.success || !result.data) {
+        throw new BadRequestException(
+          `findOne failed: ${inspect({ result }, { depth: null })}`,
+        );
+      }
+
+      return this.firestoreService.parseFirebaseResult(
+        Collection.PRODUCTS,
+        result,
+      ) as DbProduct;
+    } catch (error) {
+      this.logger.error(
+        `findOne error: ${inspect({ error }, { depth: null })}`,
+      );
+    }
+  }
+
+  async findAll() {
+    try {
+      const result = await this.firestoreService.get(Collection.PRODUCTS);
+      if (!result || !result.success || !result.data) {
+        throw new BadRequestException(
+          `FindAll failed: ${inspect({ result }, { depth: null })}`,
+        );
+      }
+      return this.firestoreService.parseFirebaseResult(
+        Collection.PRODUCTS,
+        result,
+      ) as DbProduct[];
+    } catch (error) {
+      this.logger.error(
+        `findAll error: ${inspect({ error }, { depth: null })}`,
+      );
+    }
+  }
+
+  async update(updateProductDto: UpdateProductDto) {
+    try {
+      const { id } = updateProductDto;
+      return (await this.firestoreService.update(
+        Collection.PRODUCTS,
+        id,
+        updateProductDto,
+      )) as DbProduct;
+    } catch (error) {
+      this.logger.error(`update error: ${inspect({ error }, { depth: null })}`);
+    }
+  }
+
+  async updateUnits(user: IDbUser, updateUnitsDto: UpdateUnitsDto) {
+    try {
+      const product = await this.findOne(updateUnitsDto.id);
+      if (!product) {
+        throw new BadRequestException(`Product not found`);
+      }
+      const userUnits = user.unitsOwnedIds;
+      // validate users units
+      updateUnitsDto.unitsAvailable.map((unitId) => {
+        if (!userUnits.includes(unitId)) {
+          throw new BadRequestException(`User doesn't own unit ${unitId}`);
         }
+      });
 
-        if (updateUnitsDto.unitsAvailable.includes(currentValue)) {
-          return [...previousValue, currentValue];
-        }
+      const mergedUnits = new Set([
+        ...product.unitsAvailable,
+        ...updateUnitsDto.unitsAvailable,
+      ]);
 
-        return [...previousValue];
-      },
-      [],
-    );
+      const updatedUnits: string[] = [...mergedUnits].reduce(
+        (previousValue, currentValue, _, array) => {
+          if (!array.includes(currentValue)) {
+            return [...previousValue, currentValue];
+          }
 
-    const updatedProduct: UpdateProductDto = {
-      id: updateUnitsDto.id,
-      unitsAvailable: updatedUnits,
-    };
+          if (updateUnitsDto.unitsAvailable.includes(currentValue)) {
+            return [...previousValue, currentValue];
+          }
 
-    return await this.update(updatedProduct);
+          return [...previousValue];
+        },
+        [],
+      );
+
+      const updatedProduct: UpdateProductDto = {
+        id: updateUnitsDto.id,
+        unitsAvailable: updatedUnits,
+      };
+
+      return await this.update(updatedProduct);
+    } catch (error) {
+      this.logger.error(
+        `updateUnits error: ${inspect({ error }, { depth: null })}`,
+      );
+    }
   }
 
   async remove(id: string) {
-    const result = (await this.dbService.query<DbProduct>(
-      Delete(Select(['ref'], Get(Match(Index('product_by_id'), id)))),
-    )) as DbProduct;
-    if (!result) {
-      throw new BadRequestException(
-        `Product with id ${id} couldn't be deleted`,
+    try {
+      const result = await this.firestoreService.delete(
+        Collection.PRODUCTS,
+        id,
+      );
+      if (!result) {
+        throw new BadRequestException(`remove failed: ${{ result, id }}`);
+      }
+    } catch (error) {
+      this.logger.error(
+        `updateUnits error: ${inspect({ error }, { depth: null })}`,
       );
     }
-    return result;
   }
 
   async uploadFilesToS3(files: {
-    image: Express.Multer.File[];
-    thumbnail: Express.Multer.File[];
+    image: Multer.File[];
+    thumbnail: Multer.File[];
   }) {
     try {
       const urls = [];

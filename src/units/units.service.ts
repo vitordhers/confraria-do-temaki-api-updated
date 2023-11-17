@@ -1,28 +1,17 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
-import {
-  Collection,
-  Create,
-  Get,
-  Ref,
-  Map,
-  Paginate,
-  Match,
-  Index,
-  Lambda,
-  Documents,
-  Update,
-  Select,
-  Delete,
-} from 'faunadb';
-import { FaunaDbService } from '../db/faunadb.service';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
 import { DbUnit } from './entities/unit.entity';
 import { v4 as uuid } from 'uuid';
+import { FirestoreService } from '../db/firestore.service';
+import { Collection } from '../db/collection.enum';
+import { inspect } from 'util';
 
 @Injectable()
 export class UnitsService {
-  constructor(private dbService: FaunaDbService) {}
+  private logger = new Logger('UnitsService');
+  constructor(private firestoreService: FirestoreService) {}
+
   async create(createUnitDto: CreateUnitDto) {
     const {
       name,
@@ -45,50 +34,64 @@ export class UnitsService {
       lng,
       whatsapp,
     };
-    return (await this.dbService.query<DbUnit>(
-      Create(Collection('units'), {
-        data: newUnit,
-      }),
-    )) as DbUnit;
+
+    try {
+      const result = await this.firestoreService.create(
+        Collection.UNITS,
+        newUnit,
+      );
+
+      return this.firestoreService.parseFirebaseResult(
+        Collection.UNITS,
+        result,
+      ) as DbUnit;
+    } catch (error) {
+      this.logger.error(`create error ${inspect({ error }, { depth: null })}`);
+    }
   }
 
   async findAll() {
-    const result = (await this.dbService.query<DbUnit>(
-      Map(
-        Paginate(Documents(Collection('units'))),
-        Lambda((x) => Get(x)),
-      ),
-    )) as DbUnit[];
-    if (result) {
-      return result;
+    try {
+      const result = await this.firestoreService.get(Collection.UNITS);
+      const parsedResults = this.firestoreService.parseFirebaseResult(
+        Collection.UNITS,
+        result,
+      ) as DbUnit[] | DbUnit;
+      if (Array.isArray(parsedResults)) {
+        [...parsedResults];
+      }
+      return [parsedResults];
+    } catch (error) {
+      this.logger.error(`findAll error ${inspect({ error }, { depth: null })}`);
+
+      return [];
     }
-    return [];
   }
 
   async update(updateUnitDto: UpdateUnitDto) {
-    const result = (await this.dbService.query<DbUnit>(
-      Update(
-        Select(['ref'], Get(Match(Index('unit_by_id'), updateUnitDto.id))),
-        {
-          data: updateUnitDto,
-        },
-      ),
-    )) as DbUnit;
-    if (!result) {
-      throw new BadRequestException(
-        `Unit with id ${updateUnitDto.id} couldn't be deleted`,
-      );
+    try {
+      const { id } = updateUnitDto;
+      const result = (await this.firestoreService.update(
+        Collection.UNITS,
+        id,
+        updateUnitDto,
+      )) as DbUnit;
+
+      return result;
+    } catch (error) {
+      this.logger.error(`update error ${inspect({ error }, { depth: null })}`);
     }
-    return result;
   }
 
   async remove(id: string) {
-    const result = (await this.dbService.query<DbUnit>(
-      Delete(Select(['ref'], Get(Match(Index('unit_by_id'), id)))),
-    )) as DbUnit;
-    if (!result) {
-      throw new BadRequestException(`User with id ${id} couldn't be deleted`);
+    try {
+      const result = await this.firestoreService.delete(Collection.UNITS, id);
+
+      if (!result) {
+        throw new BadRequestException(`delete failed ${result}`);
+      }
+    } catch (error) {
+      this.logger.error(`update error ${inspect({ error }, { depth: null })}`);
     }
-    return;
   }
 }

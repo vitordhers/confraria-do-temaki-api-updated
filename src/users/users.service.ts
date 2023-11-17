@@ -1,30 +1,20 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { genSalt, hash } from 'bcryptjs';
-import {
-  Collection,
-  Get,
-  Index,
-  Match,
-  Map,
-  Paginate,
-  Documents,
-  Lambda,
-  Update,
-  Select,
-  Create,
-  Delete,
-} from 'faunadb';
 import { IDbUser } from '../shared/interfaces/db-user.interface';
-import { FaunaDbService } from '../db/faunadb.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { v4 as uuid } from 'uuid';
 import { UpdateUserPasswordDto } from './dto/update-user-password.dto';
+import { FirestoreService } from '../db/firestore.service';
+import { Collection } from '../db/collection.enum';
+import { inspect } from 'util';
+import { FirestoreFilter } from '../db/interfaces';
 
 @Injectable()
 export class UsersService {
-  constructor(private dbService: FaunaDbService) {}
+  private logger = new Logger('UsersService');
+  constructor(private firestoreService: FirestoreService) {}
 
   async create(createUserDto: CreateUserDto) {
     const { name, surname, email, unitsOwnedIds, role, password } =
@@ -41,89 +31,129 @@ export class UsersService {
       role,
       password: storedPass,
     };
-    const result = await this.dbService.query<IDbUser>(
-      Create(Collection('users'), {
-        data: newUser,
-      }),
-    );
-    // send user e-mail
-    return result as IDbUser;
+    try {
+      const result = await this.firestoreService.create<IDbUser>(
+        Collection.USERS,
+        newUser,
+      );
+      // send user e-mail
+      return this.firestoreService.parseFirebaseResult(
+        Collection.USERS,
+        result,
+      ) as User;
+    } catch (error) {
+      this.logger.error(
+        `updateUnits error: ${inspect({ error }, { depth: null })}`,
+      );
+    }
   }
 
-  async findAll(size = 1000) {
-    const result = (await this.dbService.query<IDbUser>(
-      Map(
-        Paginate(Documents(Collection('users')), { size }),
-        Lambda((x) => Get(x)),
-      ),
-    )) as IDbUser[];
-    if (result) {
-      return result.map((user) => new User(user));
+  async findAll() {
+    try {
+      const result = await this.firestoreService.get(Collection.USERS);
+      if (!result || !result.success || !result.data) {
+        throw new BadRequestException(
+          `findAll failed ${inspect({ result }, { depth: null })}`,
+        );
+      }
+      return this.firestoreService.parseFirebaseResult(
+        Collection.USERS,
+        result,
+      );
+    } catch (error) {
+      this.logger.error(
+        `findAll error: ${inspect({ error }, { depth: null })}`,
+      );
+      return [];
     }
-    return [];
   }
 
   async findOne(id: string): Promise<IDbUser | undefined> {
-    const result = (await this.dbService.query<IDbUser>(
-      Get(Match(Index('user_by_id'), id)),
-    )) as IDbUser;
-    if (!result) {
-      return undefined;
+    try {
+      const result = await this.firestoreService.getOne(Collection.USERS, id);
+
+      if (!result || !result.success || !result.data) {
+        throw new BadRequestException(
+          `findOne failed ${inspect({ result }, { depth: null })}`,
+        );
+      }
+      return this.firestoreService.parseFirebaseResult(
+        Collection.USERS,
+        result,
+      ) as IDbUser;
+    } catch (error) {
+      this.logger.error(
+        `findOne error: ${inspect({ error }, { depth: null })}`,
+      );
     }
-    return result;
   }
 
   async findOneByEmail(email: string) {
-    const result = (await this.dbService.query<IDbUser>(
-      Get(Match(Index('user_by_email'), email)),
-    )) as IDbUser;
-    if (!result) {
-      return undefined;
+    try {
+      const filters = [
+        { fieldPath: 'email', filterOp: '==', value: email } as FirestoreFilter,
+      ];
+      const result = await this.firestoreService.get(Collection.USERS, filters);
+      if (!result || !result.success || !result.data) {
+        throw new BadRequestException(
+          `findOneByEmail failed ${inspect({ result }, { depth: null })}`,
+        );
+      }
+      return this.firestoreService.parseFirebaseResult(
+        Collection.USERS_AUTH,
+        result,
+      ) as User;
+    } catch (error) {
+      this.logger.error(
+        `findOneByEmail error: ${inspect({ error }, { depth: null })}`,
+      );
     }
-    return result;
   }
 
   async update(updateUserDto: UpdateUserDto) {
-    const result = (await this.dbService.query<IDbUser>(
-      Update(
-        Select(['ref'], Get(Match(Index('user_by_id'), updateUserDto.id))),
-        {
-          data: updateUserDto,
-        },
-      ),
-    )) as IDbUser;
-    if (!result) {
-      throw new BadRequestException();
+    try {
+      const { id } = updateUserDto;
+      return (await this.firestoreService.update(
+        Collection.USERS,
+        id,
+        updateUserDto,
+      )) as User;
+    } catch (error) {
+      this.logger.error(`update error: ${inspect({ error }, { depth: null })}`);
     }
-    return new User(result);
   }
 
   async updatePassword(
     id: string,
     updateUserPasswordDto: UpdateUserPasswordDto,
   ) {
-    const salt = await genSalt();
-    const hashedPassword = await hash(updateUserPasswordDto.password, salt);
-    const password = salt + ':' + hashedPassword;
+    try {
+      const salt = await genSalt();
+      const hashedPassword = await hash(updateUserPasswordDto.password, salt);
+      const password = salt + ':' + hashedPassword;
 
-    const result = (await this.dbService.query<IDbUser>(
-      Update(Select(['ref'], Get(Match(Index('user_by_id'), id))), {
-        data: { password },
-      }),
-    )) as IDbUser;
-    if (!result) {
-      throw new BadRequestException();
+      const result = await this.firestoreService.update(Collection.USERS, id, {
+        password,
+      });
+      return result as User;
+    } catch (error) {
+      this.logger.error(
+        `updatePassword error: ${inspect({ error }, { depth: null })}`,
+      );
     }
-    return;
   }
 
   async remove(id: string) {
-    const result = (await this.dbService.query<IDbUser>(
-      Delete(Select(['ref'], Get(Match(Index('user_by_id'), id)))),
-    )) as IDbUser;
-    if (!result) {
-      throw new BadRequestException(`User with id ${id} couldn't be deleted`);
+    try {
+      const result = await this.firestoreService.delete(Collection.USERS, id);
+      if (!result) {
+        throw new BadRequestException(`failed: ${{ result, id }}`);
+      }
+      return true;
+    } catch (error) {
+      this.logger.error(`update error: ${inspect({ error }, { depth: null })}`);
+
+      return false;
     }
-    return;
   }
 }

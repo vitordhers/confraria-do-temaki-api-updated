@@ -26,8 +26,11 @@ export class TokenService {
   }
 
   createAccessToken(payload: IJwtPayload) {
+    const secret = this.configService.get<string>(
+      'ACCESS_TOKEN_SECRET_PRIVATE',
+    );
     return this.jwtService.sign(payload, {
-      secret: this.configService.get<string>('ACCESS_TOKEN_SECRET_PRIVATE'),
+      secret,
       expiresIn: '10m',
       algorithm: Algorithms.ES384,
     });

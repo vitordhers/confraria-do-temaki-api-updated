@@ -1,37 +1,25 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { createTransport, Transporter } from 'nodemailer';
 import FranchisingContactDto from './dto/franchising-contact.dto';
 import { ConfigService } from '@nestjs/config';
 import { DbFranchisingLead } from './entities/db-franchising-lead.entity';
 import { v4 as uuid } from 'uuid';
-import { FaunaDbService } from 'src/db/faunadb.service';
-import {
-  Collection,
-  ContainsField,
-  Create,
-  Documents,
-  Get,
-  If,
-  Index,
-  Lambda,
-  Map,
-  Match,
-  Paginate,
-  Select,
-  Sum,
-  Update,
-} from 'faunadb';
 import { UpdateReadAtDto } from './dto/update-lead-read-at.dto';
 import CreateContactMessageDto from './dto/create-contact-message.dto';
 import { DbMessageContact } from './entities/db-message-contact.entity';
+import { FirestoreService } from '../db/firestore.service';
+import { Collection } from '../db/collection.enum';
+import { inspect } from 'util';
+import { FirestoreFilter } from '../db/interfaces';
 
 @Injectable()
 export class MessagesService {
+  private logger = new Logger('MessagesService');
   private transporter: Transporter;
 
   constructor(
     private configService: ConfigService,
-    private dbService: FaunaDbService,
+    private firestoreService: FirestoreService,
   ) {
     this.transporter = createTransport({
       host: 'smtpout.secureserver.net',
@@ -71,16 +59,17 @@ export class MessagesService {
       sentAt: Math.round(Date.now() / 1000),
       readAt: null,
     };
+    try {
+      const result = await this.firestoreService.create(
+        Collection.LEADS,
+        newFranchisingLead,
+      );
 
-    const result = (await this.dbService.query<DbFranchisingLead>(
-      Create(Collection('leads'), {
-        data: newFranchisingLead,
-      }),
-    )) as DbFranchisingLead;
-
-    if (result) {
-      return true;
-      //   return await this.sendFranchisingEmail(newFranchisingLead);
+      return result?.success;
+    } catch (error) {
+      this.logger.error(
+        `createFranchisingLead error ${inspect({ error }, { depth: null })}`,
+      );
     }
   }
 
@@ -96,67 +85,80 @@ export class MessagesService {
       readAt: null,
     };
 
-    const result = (await this.dbService.query<DbMessageContact>(
-      Create(Collection('messages'), {
-        data: newMessageContactDto,
-      }),
-    )) as DbMessageContact;
+    try {
+      const result = await this.firestoreService.create(
+        Collection.MESSAGES,
+        newMessageContactDto,
+      );
 
-    if (result) {
-      return true;
-      // return await this.sendFranchisingEmail(newFranchisingLead);
+      return result?.success;
+    } catch (error) {
+      this.logger.error(
+        `createContactMessage error ${inspect({ error }, { depth: null })}`,
+      );
     }
   }
 
   async getFranchisingLeads({ after, size }: { after?: number; size: number }) {
-    const result = await this.dbService.query<DbFranchisingLead[]>(
-      Map(
-        Paginate(
-          Match(Index('leads_sort_by_sentAt_desc')),
-          after ? { size, after } : { size },
-        ),
-        Lambda((x, ref) =>
-          Select(['data'], Match(Index('leads_sort_by_sentAt_desc')), Get(ref)),
-        ),
-      ),
-    );
+    try {
+      const result = await this.firestoreService.get(
+        Collection.LEADS,
+        undefined,
+        { field: 'sentAt', order: 'desc' },
+        { startAfter: after, pageSize: size },
+      );
 
-    if (result) {
-      if (after) {
-        result.shift();
+      if (!result || !result.success) {
+        throw new BadRequestException(
+          `getFranchisingLeads failed: ${inspect({ result }, { depth: null })}`,
+        );
       }
-      return result;
+
+      const leads = this.firestoreService.parseFirebaseResult(
+        Collection.LEADS,
+        result,
+      ) as DbFranchisingLead[];
+
+      return leads;
+    } catch (error) {
+      this.logger.error(
+        `getFranchisingLeads error ${inspect({ error }, { depth: null })}`,
+      );
+      return [];
     }
-    return [];
   }
 
   async getMessageContacts({ after, size }: { after?: number; size: number }) {
-    const result = (await this.dbService.query<DbMessageContact[]>(
-      Map(
-        Paginate(
-          Match(Index('messages_sort_by_sentAt_desc')),
-          after ? { size, after } : { size },
-        ),
-        Lambda((x, ref) =>
-          Select(
-            ['data'],
-            Match(Index('messages_sort_by_sentAt_desc')),
-            Get(ref),
-          ),
-        ),
-      ),
-    )) as DbMessageContact[];
-    if (result) {
-      if (after) {
-        result.shift();
+    try {
+      const result = await this.firestoreService.get(
+        Collection.MESSAGES,
+        undefined,
+        { field: 'sentAt', order: 'desc' },
+        { startAfter: after, pageSize: size },
+      );
+
+      if (!result || !result.success) {
+        throw new BadRequestException(
+          `getMessageContacts failed: ${inspect({ result }, { depth: null })}`,
+        );
       }
-      return result;
+
+      const messages = this.firestoreService.parseFirebaseResult(
+        Collection.MESSAGES,
+        result,
+      ) as DbMessageContact[];
+
+      return messages;
+    } catch (error) {
+      this.logger.error(
+        `getMessageContacts error ${inspect({ error }, { depth: null })}`,
+      );
+      return [];
     }
-    return [];
   }
 
   async sendFranchisingEmail(franchisingLead: DbFranchisingLead) {
-    this.transporter.verify((error, _) => {
+    this.transporter.verify((error) => {
       if (error) {
         console.log(error);
       }
@@ -251,72 +253,95 @@ export class MessagesService {
   }
 
   async updateLeadReatAt(updateLeadReadAtDto: UpdateReadAtDto) {
-    const result = await this.dbService.query<DbFranchisingLead>(
-      Update(
-        Select(
-          ['ref'],
-          Get(Match(Index('lead_by_id'), updateLeadReadAtDto.id)),
-        ),
-        {
-          data: {
-            readAt: Math.round(
-              new Date(updateLeadReadAtDto.readAt).getTime() / 1000,
-            ),
-          },
-        },
-      ),
-    );
+    const { id } = updateLeadReadAtDto;
+    try {
+      const lead = (await this.firestoreService.update(
+        Collection.LEADS,
+        id,
+        updateLeadReadAtDto,
+      )) as DbFranchisingLead;
 
-    return result;
+      return lead;
+    } catch (error) {
+      this.logger.error(
+        `updateLeadReatAt error ${inspect({ error }, { depth: null })}`,
+      );
+    }
   }
 
   async updateMessageReatAt(updateMessageReadAtDto: UpdateReadAtDto) {
-    const result = await this.dbService.query<DbMessageContact>(
-      Update(
-        Select(
-          ['ref'],
-          Get(Match(Index('message_by_id'), updateMessageReadAtDto.id)),
-        ),
-        {
-          data: {
-            readAt: Math.round(
-              new Date(updateMessageReadAtDto.readAt).getTime() / 1000,
-            ),
-          },
-        },
-      ),
-    );
+    try {
+      const { id } = updateMessageReadAtDto;
+      const message = (await this.firestoreService.update(
+        Collection.MESSAGES,
+        id,
+        updateMessageReadAtDto,
+      )) as DbFranchisingLead;
 
-    return result;
+      return message;
+    } catch (error) {
+      this.logger.error(
+        `updateMessageReatAt error ${inspect({ error }, { depth: null })}`,
+      );
+    }
   }
 
   async getNewLeadsAndMessages() {
-    let newLeads = (await this.dbService.query<[number]>(
-      Sum(
-        Map(
-          Paginate(Documents(Collection('leads'))),
-          Lambda((ref) =>
-            If(ContainsField('readAt', Select('data', Get(ref))), 0, 1),
-          ),
-        ),
-      ),
-    )) as [number];
-    if (!newLeads) {
-      newLeads = [0];
+    let newLeads = 0;
+
+    try {
+      const unreadLeadResults = await this.firestoreService.get(
+        Collection.LEADS,
+        [
+          {
+            fieldPath: 'readAt',
+            filterOp: '==',
+            value: null,
+          } as FirestoreFilter,
+        ],
+      );
+      if (
+        unreadLeadResults &&
+        unreadLeadResults.success &&
+        unreadLeadResults.data
+      ) {
+        newLeads = Array.isArray(unreadLeadResults.data)
+          ? unreadLeadResults.data.length
+          : 1;
+      }
+    } catch (error) {
+      this.logger.error(
+        `getNewLeadsAndMessages error ${inspect({ error }, { depth: null })}`,
+      );
     }
-    let newMessages = (await this.dbService.query<[number]>(
-      Sum(
-        Map(
-          Paginate(Documents(Collection('messages'))),
-          Lambda((ref) =>
-            If(ContainsField('readAt', Select('data', Get(ref))), 0, 1),
-          ),
-        ),
-      ),
-    )) as [number];
-    if (!newMessages) {
-      newMessages = [0];
+
+    let newMessages = 0;
+    try {
+      const unreadMessageResults = await this.firestoreService.get(
+        Collection.MESSAGES,
+        [
+          {
+            fieldPath: 'readAt',
+            filterOp: '==',
+            value: null,
+          } as FirestoreFilter,
+        ],
+      );
+      if (
+        unreadMessageResults &&
+        unreadMessageResults.success &&
+        unreadMessageResults.data
+      ) {
+        newMessages = Array.isArray(unreadMessageResults.data)
+          ? unreadMessageResults.data.length
+          : 1;
+      }
+    } catch (error) {
+      this.logger.error(
+        `getNewLeadsAndMessages error ${inspect({ error }, { depth: null })}`,
+      );
     }
-    return { newLeads: newLeads[0], newMessages: newMessages[0] };
+
+    return { newLeads, newMessages };
   }
 }

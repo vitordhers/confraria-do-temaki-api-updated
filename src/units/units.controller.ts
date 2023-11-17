@@ -12,7 +12,7 @@ import { UnitsService } from './units.service';
 import { CreateUnitDto } from './dto/create-unit.dto';
 import { UpdateUnitDto } from './dto/update-unit.dto';
 import mapRequestToResponse from '../shared/functions/map-request-to-response.function';
-import { AdminToken } from 'src/auth/guards/admin-role.guard';
+import { AdminToken } from '../auth/guards/admin-role.guard';
 import { DbUnit } from './entities/unit.entity';
 
 @Controller('units')

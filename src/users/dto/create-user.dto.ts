@@ -6,7 +6,7 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import { GoogleRecaptchaV3 } from 'src/shared/validators/google-recaptcha-v3.constraint';
+import { GoogleRecaptchaV3 } from '../../shared/validators/google-recaptcha-v3.constraint';
 import { UserRole } from '../../shared/enums/user-role.enum';
 
 export class CreateUserDto {

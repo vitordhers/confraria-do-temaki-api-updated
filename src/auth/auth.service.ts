@@ -11,7 +11,7 @@ import { firstValueFrom, map } from 'rxjs';
 import { TokenService } from './jwt.service';
 // import { v4 as uuid } from 'uuid';
 import { SignInDto } from './dto/signin.dto';
-import { IUser } from 'src/shared/interfaces/user.interface';
+import { IUser } from '../shared/interfaces/user.interface';
 
 @Injectable()
 export class AuthService {
@@ -50,10 +50,7 @@ export class AuthService {
     return user;
   }
 
-  async googleRecaptchaCheck(
-    response: string,
-    remoteip?: string,
-  ): Promise<boolean> {
+  async googleRecaptchaCheck(response: string): Promise<boolean> {
     const secret_key = this.configService.get<string>(
       'GOOGLE_RECAPTCHA_SECRET',
     );

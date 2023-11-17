@@ -20,10 +20,10 @@ import mapRequestToResponse from '../shared/functions/map-request-to-response.fu
 import { DbProduct } from './entities/product.entity';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import fileFilter from './functions/file-filter.function';
-import { AdminToken } from 'src/auth/guards/admin-role.guard';
+import { AdminToken } from '../auth/guards/admin-role.guard';
 import { Multer } from 'multer'; // this line makes multer types available
 import { UpdateUnitsDto } from './dto/update-units.dto';
-import { AccessToken } from 'src/auth/guards/jwt.guard';
+import { AccessToken } from '../auth/guards/jwt.guard';
 import { DbUser } from 'aws-sdk/clients/cloudwatchevents';
 
 @Controller('products')
@@ -102,8 +102,8 @@ export class ProductsController {
   async uploadImage(
     @UploadedFiles()
     files: {
-      image: Express.Multer.File[];
-      thumbnail: Express.Multer.File[];
+      image: Multer.File[];
+      thumbnail: Multer.File[];
     },
   ) {
     return await mapRequestToResponse<
